@@ -26,7 +26,10 @@ export default function KaryawanDashboard() {
   const [requests, setRequests] = useState<RequestItem[]>([])
   const [query, setQuery] = useState('')
   const [form, setForm] = useState<RequestForm>({ amount: 0, reason: '' })
+  const [editingRequestId, setEditingRequestId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<RequestForm>({ amount: 0, reason: '' })
   const [saving, setSaving] = useState(false)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const filteredRequests = useMemo(() => {
@@ -61,6 +64,73 @@ export default function KaryawanDashboard() {
 
     loadRequests()
   }, [supabase, profile?.id])
+
+  const startEdit = (item: RequestItem) => {
+    setEditingRequestId(item.id)
+    setEditForm({ amount: item.amount, reason: item.reason })
+    setError(null)
+  }
+
+  const cancelEdit = () => {
+    setEditingRequestId(null)
+    setEditForm({ amount: 0, reason: '' })
+  }
+
+  const handleUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!supabase || !profile?.id || !editingRequestId) return
+    const client = supabase
+    setActionLoading(editingRequestId)
+    setError(null)
+
+    const { error: updateError } = await client
+      .from('cash_advance_requests')
+      .update({ amount: editForm.amount, reason: editForm.reason })
+      .eq('id', editingRequestId)
+      .eq('user_id', profile.id)
+      .eq('status', 'pending')
+
+    setActionLoading(null)
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+
+    setRequests((current) =>
+      current.map((request) =>
+        request.id === editingRequestId
+          ? { ...request, amount: editForm.amount, reason: editForm.reason }
+          : request,
+      ),
+    )
+
+    cancelEdit()
+  }
+
+  const handleDeleteRequest = async (requestId: string) => {
+    if (!supabase || !profile?.id) return
+    const client = supabase
+    setActionLoading(requestId)
+    setError(null)
+
+    const { error: deleteError } = await client
+      .from('cash_advance_requests')
+      .delete()
+      .eq('id', requestId)
+      .eq('user_id', profile.id)
+      .eq('status', 'pending')
+
+    setActionLoading(null)
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
+
+    setRequests((current) => current.filter((item) => item.id !== requestId))
+    if (editingRequestId === requestId) {
+      cancelEdit()
+    }
+  }
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -137,6 +207,54 @@ export default function KaryawanDashboard() {
             </form>
           </section>
 
+          {editingRequestId ? (
+            <section className="card p-6 mt-8">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-slate-500">Edit Pengajuan</p>
+                  <h2 className="text-xl font-semibold text-slate-900">Perbarui request pending</h2>
+                </div>
+              </div>
+
+              <form onSubmit={handleUpdate} className="mt-6 grid gap-4">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="grid gap-2">
+                    <span>Nominal</span>
+                    <input
+                      type="number"
+                      value={editForm.amount}
+                      onChange={(event) => setEditForm((prev) => ({ ...prev, amount: Number(event.target.value) }))}
+                      className="input"
+                      placeholder="Masukkan nominal"
+                      required
+                      min={1}
+                    />
+                  </label>
+                  <label className="grid gap-2">
+                    <span>Alasan</span>
+                    <textarea
+                      value={editForm.reason}
+                      onChange={(event) => setEditForm((prev) => ({ ...prev, reason: event.target.value }))}
+                      className="textarea"
+                      rows={4}
+                      placeholder="Perbarui alasan pengajuan"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <button className="btn btn-primary" disabled={actionLoading !== null}>
+                    {actionLoading === editingRequestId ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={cancelEdit} disabled={actionLoading !== null}>
+                    Batal
+                  </button>
+                </div>
+              </form>
+            </section>
+          ) : null}
+
           <section className="card p-6 mt-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -175,8 +293,20 @@ export default function KaryawanDashboard() {
                       <td className="py-3 px-2 flex flex-wrap gap-2">
                         {item.status === 'pending' ? (
                           <>
-                            <button className="btn btn-secondary">Edit</button>
-                            <button className="btn btn-danger">Hapus</button>
+                            <button
+                              className="btn btn-secondary"
+                              disabled={actionLoading !== null}
+                              onClick={() => startEdit(item)}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="btn btn-danger"
+                              disabled={actionLoading === item.id}
+                              onClick={() => handleDeleteRequest(item.id)}
+                            >
+                              {actionLoading === item.id ? 'Menghapus...' : 'Hapus'}
+                            </button>
                           </>
                         ) : (
                           <span className="text-slate-500">Tidak tersedia</span>

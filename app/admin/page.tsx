@@ -18,7 +18,9 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [requests, setRequests] = useState<AdminRequestRow[]>([])
   const [query, setQuery] = useState('')
+  const [newUser, setNewUser] = useState({ name: '', email: '', role: 'karyawan' })
   const [loading, setLoading] = useState(false)
+  const [savingUser, setSavingUser] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -96,6 +98,28 @@ export default function AdminPage() {
     setUsers((current) => current.filter((user) => user.id !== userId))
   }
 
+  const handleAddUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!supabase) return
+    setSavingUser(true)
+    setError(null)
+
+    const { data, error: insertError } = await supabase.from('users').insert({
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+    })
+
+    setSavingUser(false)
+    if (insertError) {
+      setError(insertError.message)
+      return
+    }
+
+    setUsers((current) => [...current, ...((data as AdminUser[] | null) ?? [])])
+    setNewUser({ name: '', email: '', role: 'karyawan' })
+  }
+
   return (
     <RequireAuth allowedRoles={['admin']}>
       <main className="min-h-screen bg-slate-50">
@@ -107,10 +131,50 @@ export default function AdminPage() {
                 <p className="text-slate-500">Halaman Admin</p>
                 <h1 className="text-2xl font-semibold text-slate-900">Kelola Pengguna dan Data</h1>
               </div>
-              <button className="btn btn-primary" type="button">
-                Tambah Akun
-              </button>
             </div>
+
+            <form onSubmit={handleAddUser} className="mt-6 grid gap-4">
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="grid gap-2">
+                  <span>Nama</span>
+                  <input
+                    className="input"
+                    placeholder="Nama lengkap"
+                    value={newUser.name}
+                    onChange={(event) => setNewUser((prev) => ({ ...prev, name: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="grid gap-2">
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    className="input"
+                    placeholder="Email"
+                    value={newUser.email}
+                    onChange={(event) => setNewUser((prev) => ({ ...prev, email: event.target.value }))}
+                    required
+                  />
+                </label>
+                <label className="grid gap-2">
+                  <span>Role</span>
+                  <select
+                    className="select"
+                    value={newUser.role}
+                    onChange={(event) => setNewUser((prev) => ({ ...prev, role: event.target.value }))}
+                  >
+                    <option value="karyawan">Karyawan</option>
+                    <option value="bod">BOD</option>
+                    <option value="finance">Finance</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+              </div>
+
+              <button className="btn btn-primary max-w-fit" type="submit" disabled={savingUser}>
+                {savingUser ? 'Menyimpan...' : 'Tambah Akun'}
+              </button>
+            </form>
 
             <div className="mt-6 overflow-x-auto">
               <table className="min-w-full text-left text-sm text-slate-700">
